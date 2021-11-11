@@ -9,15 +9,15 @@
 import UIKit
 
 class GameViewController: UIViewController {
-
-    @IBOutlet var gameboardView: GameboardView!
-    @IBOutlet var firstPlayerTurnLabel: UILabel!
-    @IBOutlet var secondPlayerTurnLabel: UILabel!
-    @IBOutlet var winnerLabel: UILabel!
-    @IBOutlet var restartButton: UIButton!
     
+    @IBOutlet private var gameboardView: GameboardView!
+    @IBOutlet private(set) var firstPlayerTurnLabel: UILabel!
+    @IBOutlet private(set) var secondPlayerTurnLabel: UILabel!
+    @IBOutlet private(set) var winnerLabel: UILabel!
+    @IBOutlet private var restartButton: UIButton!
+    
+    private let gameboard = Gameboard()
     private lazy var referee = Referee(gameboard: self.gameboard)
-    private var gameboard = Gameboard()
     
     var vsAI = true
     
@@ -30,55 +30,83 @@ class GameViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        self.goToFirstState()
+        self.goToFisrtState()
         
-        self.gameboardView.onSelectPosition = { [unowned self] position in
+        self.gameboardView.onSelectPosition = { [weak self] position in
+            guard let self = self else { return }
             self.currentState.addMark(at: position)
             
             if self.currentState.isCompleted {
-                self.goToNextState()
+                self.vsAI ? self.goToNextStateAI() : self.goToNextState()
             }
+        }
+    }
+    
+    func goToFisrtState() {
+        self.currentState = PlayerInputGameState(
+            player: .first,
+            gameboard: self.gameboard,
+            gameView: self.gameboardView,
+            gameViewController: self
+        )
+    }
+    
+    func goToNextState() {
+        if let player = self.referee.determineWinner() {
+            self.currentState = EndGameState(winner: player, gameViewController: self)
+            return
+        }
+        
+        if self.gameboard.getEmptyPositions().isEmpty {
+            self.currentState = EndGameState(winner: nil, gameViewController: self)
+            return
+        }
+        
+        guard let playerInputState = self.currentState as? PlayerInputGameState else {
+            return
+        }
+        
+        let player = playerInputState.player
+        
+        self.currentState = PlayerInputGameState(
+            player: player.next,
+            gameboard: self.gameboard,
+            gameView: self.gameboardView,
+            gameViewController: self
+        )
+    }
+    
+    func goToNextStateAI() {
+        if let player = self.referee.determineWinner() {
+            self.currentState = EndGameState(winner: player, gameViewController: self)
+            return
+        }
+        
+        if self.gameboard.getEmptyPositions().isEmpty {
+            self.currentState = EndGameState(winner: nil, gameViewController: self)
+            return
+        }
+        
+        if (self.currentState as? ComputerInputGameState) != nil {
+            self.currentState = PlayerInputGameState(
+                player: .first,
+                gameboard: self.gameboard,
+                gameView: self.gameboardView,
+                gameViewController: self
+            )
+        } else {
+            self.currentState = ComputerInputGameState(
+                gameboard: self.gameboard,
+                gameView: self.gameboardView,
+                gameViewController: self
+            )
         }
     }
     
     @IBAction func restartButtonTapped(_ sender: UIButton) {
         self.gameboard.clear()
         self.gameboardView.clear()
-        self.goToFirstState()
-        
-        recordEvent(.restartGame)
-    }
-    
-    // MARK: - State Machine
-    
-    private func goToFirstState() {
-        let player = Player.first
-        self.currentState = PlayerInputState(
-            player: player,
-            markPrototype: player.markViewPrototype,
-            gameViewController: self,
-            gameboard: self.gameboard,
-            gameboardView: self.gameboardView
-        )
-    }
-    
-    private func goToNextState() {
-        if let winner = self.referee.determineWinner() {
-            self.currentState = WinnerState(winnerPlayer: winner, gameViewController: self)
-            
-            return
-        }
-        
-        if let playerInputState = self.currentState as? PlayerInputState {
-            let nextPlayer = playerInputState.player.next
-            self.currentState = PlayerInputState(
-                player: nextPlayer,
-                markPrototype: nextPlayer.markViewPrototype,
-                gameViewController: self,
-                gameboard: self.gameboard,
-                gameboardView: self.gameboardView
-            )
-        }
+        self.goToFisrtState()
     }
 }
 
